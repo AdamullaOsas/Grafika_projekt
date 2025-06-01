@@ -20,12 +20,16 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="constants.h" />
+    <ClInclude Include="gear.hpp" />
+    <ClInclude Include="hand.hpp" />
     <ClInclude Include="lodepng.h" />
     <ClInclude Include="shaderprogram.h" />
     <ClInclude Include="myCube.h" />
     <ClInclude Include="myTeapot.h" />
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="gear.cpp" />
+    <ClCompile Include="hand.cpp" />
     <ClCompile Include="lodepng.cpp" />
     <ClCompile Include="main_file.cpp" />
     <ClCompile Include="shaderprogram.cpp" />

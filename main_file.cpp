@@ -1,199 +1,225 @@
-/*
-Niniejszy program jest wolnym oprogramowaniem; możesz go
-rozprowadzać dalej i / lub modyfikować na warunkach Powszechnej
-Licencji Publicznej GNU, wydanej przez Fundację Wolnego
-Oprogramowania - według wersji 2 tej Licencji lub(według twojego
-wyboru) którejś z późniejszych wersji.
-
-Niniejszy program rozpowszechniany jest z nadzieją, iż będzie on
-użyteczny - jednak BEZ JAKIEJKOLWIEK GWARANCJI, nawet domyślnej
-gwarancji PRZYDATNOŚCI HANDLOWEJ albo PRZYDATNOŚCI DO OKREŚLONYCH
-ZASTOSOWAŃ.W celu uzyskania bliższych informacji sięgnij do
-Powszechnej Licencji Publicznej GNU.
-
-Z pewnością wraz z niniejszym programem otrzymałeś też egzemplarz
-Powszechnej Licencji Publicznej GNU(GNU General Public License);
-jeśli nie - napisz do Free Software Foundation, Inc., 59 Temple
-Place, Fifth Floor, Boston, MA  02110 - 1301  USA
-*/
-
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_SWIZZLE
+// main_file.cpp
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
-#include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
-#include <stdlib.h>
-#include <stdio.h>
-#include "constants.h"
-#include "lodepng.h"
-#include "shaderprogram.h"
-#include "myCube.h"
-#include "myTeapot.h"
+#include <iostream>
 
-float speed_x=0;
-float speed_y=0;
-float aspectRatio=1;
+// -----------------------------------------------------------------------------
+// ▶ Uwaga: w razie innej struktury folderów, popraw poniższe ścieżki:
+//    - „gear.hpp” oraz „hand.hpp” powinny być w katalogu z nagłówkami.
+//    - „shaderprogram.h” w katalogu z plikami nagłówkowymi (lub tam, gdzie go trzymasz).
+// -----------------------------------------------------------------------------
+#include "gear.hpp"            // <- np. #include "pliki naglowkowe/gear.hpp"
+#include "hand.hpp"            // <- np. #include "pliki naglowkowe/hand.hpp"
+#include "shaderprogram.h"     // <- np. #include "pliki naglowkowe/shaderprogram.h"
 
-ShaderProgram *sp;
+// ————————————————————————————————————————————————————————————————————————————————
+// ▶ Uwaga: ścieżki do plików *.glsl musisz dopasować według swojego układu katalogów.
+//    Poniżej zakładam, że shader’y leżą w „pliki zasobów/”.
+//    Jeśli są w „shaders/” lub innym katalogu, zmień ścieżki poniżej.
+// ————————————————————————————————————————————————————————————————————————————————
+static const char* VERTEX_SHADER_PATH = "pliki zasobow/v_lambert.glsl";   // <- dopasuj ścieżkę
+static const char* FRAGMENT_SHADER_PATH = "pliki zasobow/f_lambert.glsl";   // <- dopasuj ścieżkę
 
+// ————————————————————————————————————————————————————————————————————————————————
+// Globalne zmienne aplikacji
+// ————————————————————————————————————————————————————————————————————————————————
+int windowWidth = 1280;
+int windowHeight = 720;
+GLFWwindow* window = nullptr;
 
-//Odkomentuj, żeby rysować kostkę
-//float* vertices = myCubeVertices;
-//float* normals = myCubeNormals;
-//float* texCoords = myCubeTexCoords;
-//float* colors = myCubeColors;
-//int vertexCount = myCubeVertexCount;
+ShaderProgram* spLambert = nullptr;
 
+// Obiekty zegara
+Gear* gearA = nullptr;
+Gear* gearB = nullptr;
+Hand* secondHand = nullptr;
 
-//Odkomentuj, żeby rysować czajnik
-float* vertices = myTeapotVertices;
-float* normals = myTeapotVertexNormals;
-float* texCoords = myTeapotTexCoords;
-float* colors = myTeapotColors;
-int vertexCount = myTeapotVertexCount;
+// Macierze kamery/projekcji
+glm::mat4 P, V;
 
+// Sterowanie czasem
+bool paused = false;
+float lastTime = 0.0f;
 
-
-//Procedura obsługi błędów
-void error_callback(int error, const char* description) {
-	fputs(description, stderr);
+// ————————————————————————————————————————————————————————————————————————————————
+// Funkcja wywoływana przy zmianie rozmiaru okna
+// ————————————————————————————————————————————————————————————————————————————————
+void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height) {
+    glViewport(0, 0, width, height);
+    windowWidth = width;
+    windowHeight = height;
+    P = glm::perspective(glm::radians(45.0f),
+        (float)windowWidth / (float)windowHeight,
+        0.1f, 100.0f);
 }
 
-
-void keyCallback(GLFWwindow* window,int key,int scancode,int action,int mods) {
-    if (action==GLFW_PRESS) {
-        if (key==GLFW_KEY_LEFT) speed_x=-PI/2;
-        if (key==GLFW_KEY_RIGHT) speed_x=PI/2;
-        if (key==GLFW_KEY_UP) speed_y=PI/2;
-        if (key==GLFW_KEY_DOWN) speed_y=-PI/2;
+// ————————————————————————————————————————————————————————————————————————————————
+// Przetwarzanie klawiszy (ESC zamyka, SPACJA pauza, R resetuje)
+// ————————————————————————————————————————————————————————————————————————————————
+void processInput(GLFWwindow* window) {
+    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS) {
+        glfwSetWindowShouldClose(window, true);
     }
-    if (action==GLFW_RELEASE) {
-        if (key==GLFW_KEY_LEFT) speed_x=0;
-        if (key==GLFW_KEY_RIGHT) speed_x=0;
-        if (key==GLFW_KEY_UP) speed_y=0;
-        if (key==GLFW_KEY_DOWN) speed_y=0;
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
+        paused = !paused;
+    }
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
+        // Resetujemy obiekty: usuwamy i tworzymy na nowo
+        delete gearA; delete gearB; delete secondHand;
+        gearA = new Gear(1.0f, 0.5f, 60, 1.0f);
+        gearB = new Gear(0.2f, 0.1f, 12, -5.0f);
+        secondHand = new Hand(1.0f, 0.02f); // <- zmieniono: tylko 2 argumenty
+        lastTime = static_cast<float>(glfwGetTime());
     }
 }
 
-void windowResizeCallback(GLFWwindow* window,int width,int height) {
-    if (height==0) return;
-    aspectRatio=(float)width/(float)height;
-    glViewport(0,0,width,height);
+// ————————————————————————————————————————————————————————————————————————————————
+// Inicjalizacja OpenGL, tworzenie okna, ładowanie shaderów, obiektów
+// ————————————————————————————————————————————————————————————————————————————————
+void initOpenGLProgram() {
+    // Inicjalizacja GLFW
+    if (!glfwInit()) {
+        std::cerr << "Błąd: nie udało się zainicjalizować GLFW\n";
+        std::exit(-1);
+    }
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+
+    window = glfwCreateWindow(windowWidth, windowHeight, "Zegar mechaniczny", nullptr, nullptr);
+    if (!window) {
+        std::cerr << "Błąd: nie udało się utworzyć okna GLFW\n";
+        glfwTerminate();
+        std::exit(-1);
+    }
+    glfwMakeContextCurrent(window);
+    glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+    // Inicjalizacja GLEW
+    glewExperimental = GL_TRUE;
+    if (glewInit() != GLEW_OK) {
+        std::cerr << "Błąd: nie udało się zainicjalizować GLEW\n";
+        glfwTerminate();
+        std::exit(-1);
+    }
+
+    // Ustawienia ogólne
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
+
+    // ——————————————————————————————————————————————————————————————————————
+    // Ładowanie programu shaderowego (prosty Lambert)
+    // ——————————————————————————————————————————————————————————————————————
+    spLambert = new ShaderProgram(
+        VERTEX_SHADER_PATH,    // <- upewnij się, że ścieżka jest poprawna
+        nullptr,               // brak geometry shadera
+        FRAGMENT_SHADER_PATH   // <- upewnij się, że ścieżka jest poprawna
+    );
+    spLambert->use();
+
+    // Pobranie lokacji uniformów P i V
+    GLuint locP = spLambert->u("P");
+    GLuint locV = spLambert->u("V");
+
+    // Ustawienie początkowych macierzy projekcji i widoku
+    P = glm::perspective(glm::radians(45.0f),
+        (float)windowWidth / (float)windowHeight,
+        0.1f, 100.0f);
+    V = glm::lookAt(glm::vec3(0.0f, 3.0f, 5.0f),  // pozycja kamery
+        glm::vec3(0.0f, 0.0f, 0.0f),  // punkt, w który patrzymy
+        glm::vec3(0.0f, 1.0f, 0.0f));// wektor "up"
+    glUniformMatrix4fv(locP, 1, GL_FALSE, &P[0][0]);
+    glUniformMatrix4fv(locV, 1, GL_FALSE, &V[0][0]);
+
+    // ——————————————————————————————————————————————————————————————————————
+    // Tworzenie obiektów zegara (koła i wskazówki)
+    // ——————————————————————————————————————————————————————————————————————
+    gearA = new Gear(1.0f, 0.5f, 60, 1.0f);
+    gearB = new Gear(0.2f, 0.1f, 12, -5.0f);
+    secondHand = new Hand(1.0f, 0.02f); // <- tylko długość i grubość
+
+    lastTime = static_cast<float>(glfwGetTime());
 }
 
-//Procedura inicjująca
-void initOpenGLProgram(GLFWwindow* window) {
-	//************Tutaj umieszczaj kod, który należy wykonać raz, na początku programu************
-	glClearColor(0,0,0,1);
-	glEnable(GL_DEPTH_TEST);
-	glfwSetWindowSizeCallback(window,windowResizeCallback);
-	glfwSetKeyCallback(window,keyCallback);
-
-	sp=new ShaderProgram("v_simplest.glsl",NULL,"f_simplest.glsl");
+// ————————————————————————————————————————————————————————————————————————————————
+// Czyszczenie zasobów przed zamknięciem
+// ————————————————————————————————————————————————————————————————————————————————
+void cleanup() {
+    delete gearA;
+    delete gearB;
+    delete secondHand;
+    delete spLambert;
+    glfwTerminate();
 }
 
+// ————————————————————————————————————————————————————————————————————————————————
+// Rysowanie całej sceny
+// ————————————————————————————————————————————————————————————————————————————————
+void drawScene() {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-//Zwolnienie zasobów zajętych przez program
-void freeOpenGLProgram(GLFWwindow* window) {
-    //************Tutaj umieszczaj kod, który należy wykonać po zakończeniu pętli głównej************
+    spLambert->use();
+    GLuint locP = spLambert->u("P");
+    GLuint locV = spLambert->u("V");
+    GLuint locM = spLambert->u("M");
 
-    delete sp;
+    // Odświeżamy macierze P i V (na wypadek resize’u)
+    glUniformMatrix4fv(locP, 1, GL_FALSE, &P[0][0]);
+    glUniformMatrix4fv(locV, 1, GL_FALSE, &V[0][0]);
+
+    // ———————————————————————————————————————————————————————————————————
+    // Rysujemy koło A (w punkcie (0,0,0))
+    // ———————————————————————————————————————————————————————————————————
+    gearA->draw();
+
+    // ———————————————————————————————————————————————————————————————————
+    // Rysujemy koło B przesunięte o (outerR_A + outerR_B) w prawo:
+    // Jeśli outerRadius gearA=1.0f, gearB=0.2f, to wektor = (1.0f + 0.2f, 0, 0).
+    // Jeśli używasz innych wartości, zmień poniższy wektor translacji.
+    // ———————————————————————————————————————————————————————————————————
+    glm::mat4 translateB = glm::translate(glm::mat4(1.0f),
+        glm::vec3(1.0f + 0.2f, 0.0f, 0.0f)); // <- dostosuj, jeśli promienie się różnią
+    glUniformMatrix4fv(locM, 1, GL_FALSE, &translateB[0][0]);
+    gearB->draw();
+
+    // ———————————————————————————————————————————————————————————————————
+    // Rysowanie wskazówki sekundowej: obrót zależny od czasu rzeczywistego
+    // ———————————————————————————————————————————————————————————————————
+    float currentTime = static_cast<float>(glfwGetTime());
+    float deltaTime = currentTime - lastTime;
+    lastTime = currentTime;
+
+    if (!paused) {
+        // Kąty kół aktualizują się wewnątrz metody draw(), więc nie wołamy żadnej update()
+    }
+
+    // Obliczamy macierz obrotu dla sekundnika (6°/s)
+    float angleSec = fmod(currentTime * 6.0f, 360.0f);
+    glm::mat4 rotateHand = glm::rotate(glm::mat4(1.0f),
+        glm::radians(angleSec),
+        glm::vec3(0.0f, 0.0f, 1.0f));
+    glUniformMatrix4fv(locM, 1, GL_FALSE, &rotateHand[0][0]);
+
+    secondHand->draw(); // <- usunięty argument kąta, bo Hand::draw() nie przyjmuje parametrów
 }
 
+// ————————————————————————————————————————————————————————————————————————————————
+// Główna pętla programu
+// ————————————————————————————————————————————————————————————————————————————————
+int main() {
+    initOpenGLProgram();
 
+    while (!glfwWindowShouldClose(window)) {
+        processInput(window);
+        drawScene();
+        glfwSwapBuffers(window);
+        glfwPollEvents();
+    }
 
-
-//Procedura rysująca zawartość sceny
-void drawScene(GLFWwindow* window,float angle_x,float angle_y) {
-	//************Tutaj umieszczaj kod rysujący obraz******************l
-	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-	glm::mat4 V=glm::lookAt(
-         glm::vec3(0, 0, -3),
-         glm::vec3(0,0,0),
-         glm::vec3(0.0f,1.0f,0.0f)); //Wylicz macierz widoku
-
-    glm::mat4 P=glm::perspective(50.0f*PI/180.0f, aspectRatio, 0.01f, 50.0f); //Wylicz macierz rzutowania
-
-    glm::mat4 M=glm::mat4(1.0f);
-	M=glm::rotate(M,angle_y,glm::vec3(1.0f,0.0f,0.0f)); //Wylicz macierz modelu
-	M=glm::rotate(M,angle_x,glm::vec3(0.0f,1.0f,0.0f)); //Wylicz macierz modelu
-
-    sp->use();//Aktywacja programu cieniującego
-    //Przeslij parametry programu cieniującego do karty graficznej
-    glUniformMatrix4fv(sp->u("P"),1,false,glm::value_ptr(P));
-    glUniformMatrix4fv(sp->u("V"),1,false,glm::value_ptr(V));
-    glUniformMatrix4fv(sp->u("M"),1,false,glm::value_ptr(M));
-	glUniform4f(sp->u("lp"), 0, 0, -6, 1);
-
-    glEnableVertexAttribArray(sp->a("vertex"));  //Włącz przesyłanie danych do atrybutu vertex
-    glVertexAttribPointer(sp->a("vertex"),4,GL_FLOAT,false,0,vertices); //Wskaż tablicę z danymi dla atrybutu vertex
-
-	glEnableVertexAttribArray(sp->a("color"));  //Włącz przesyłanie danych do atrybutu color
-	glVertexAttribPointer(sp->a("color"), 4, GL_FLOAT, false, 0, colors); //Wskaż tablicę z danymi dla atrybutu color
-
-	glEnableVertexAttribArray(sp->a("normal"));  //Włącz przesyłanie danych do atrybutu normal
-	glVertexAttribPointer(sp->a("normal"), 4, GL_FLOAT, false, 0, normals); //Wskaż tablicę z danymi dla atrybutu normal
-
-    glDrawArrays(GL_TRIANGLES,0,vertexCount); //Narysuj obiekt
-
-    glDisableVertexAttribArray(sp->a("vertex"));  //Wyłącz przesyłanie danych do atrybutu vertex
-	glDisableVertexAttribArray(sp->a("color"));  //Wyłącz przesyłanie danych do atrybutu color
-	glDisableVertexAttribArray(sp->a("normal"));  //Wyłącz przesyłanie danych do atrybutu normal
-
-    glfwSwapBuffers(window); //Przerzuć tylny bufor na przedni
-}
-
-
-int main(void)
-{
-	GLFWwindow* window; //Wskaźnik na obiekt reprezentujący okno
-
-	glfwSetErrorCallback(error_callback);//Zarejestruj procedurę obsługi błędów
-
-	if (!glfwInit()) { //Zainicjuj bibliotekę GLFW
-		fprintf(stderr, "Nie można zainicjować GLFW.\n");
-		exit(EXIT_FAILURE);
-	}
-
-	window = glfwCreateWindow(500, 500, "OpenGL", NULL, NULL);  //Utwórz okno 500x500 o tytule "OpenGL" i kontekst OpenGL.
-
-	if (!window) //Jeżeli okna nie udało się utworzyć, to zamknij program
-	{
-		fprintf(stderr, "Nie można utworzyć okna.\n");
-		glfwTerminate();
-		exit(EXIT_FAILURE);
-	}
-
-	glfwMakeContextCurrent(window); //Od tego momentu kontekst okna staje się aktywny i polecenia OpenGL będą dotyczyć właśnie jego.
-	glfwSwapInterval(1); //Czekaj na 1 powrót plamki przed pokazaniem ukrytego bufora
-
-	if (glewInit() != GLEW_OK) { //Zainicjuj bibliotekę GLEW
-		fprintf(stderr, "Nie można zainicjować GLEW.\n");
-		exit(EXIT_FAILURE);
-	}
-
-	initOpenGLProgram(window); //Operacje inicjujące
-
-	//Główna pętla
-	float angle_x=0; //Aktualny kąt obrotu obiektu
-	float angle_y=0; //Aktualny kąt obrotu obiektu
-	glfwSetTime(0); //Zeruj timer
-	while (!glfwWindowShouldClose(window)) //Tak długo jak okno nie powinno zostać zamknięte
-	{
-        angle_x+=speed_x*glfwGetTime(); //Zwiększ/zmniejsz kąt obrotu na podstawie prędkości i czasu jaki upłynał od poprzedniej klatki
-        angle_y+=speed_y*glfwGetTime(); //Zwiększ/zmniejsz kąt obrotu na podstawie prędkości i czasu jaki upłynał od poprzedniej klatki
-        glfwSetTime(0); //Zeruj timer
-		drawScene(window,angle_x,angle_y); //Wykonaj procedurę rysującą
-		glfwPollEvents(); //Wykonaj procedury callback w zalezności od zdarzeń jakie zaszły.
-	}
-
-	freeOpenGLProgram(window);
-
-	glfwDestroyWindow(window); //Usuń kontekst OpenGL i okno
-	glfwTerminate(); //Zwolnij zasoby zajęte przez GLFW
-	exit(EXIT_SUCCESS);
+    cleanup();
+    return 0;
 }
