@@ -8,14 +8,14 @@
 #include <GL/glew.h>
 
 /**
- * Prosta klasa Hand – sześcian skalowany na dł. i grubość.
+ * Prosta klasa Hand – płaski prostokąt w płaszczyźnie XY.
  * Geometria zawiera pozycje (vec4), normalne (vec4) i kolory (vec4).
  */
 class Hand {
 public:
     /**
      * @param length    Długość wskazówki (w jednostkach świata)
-     * @param thickness Grubość wskazówki (w jednostkach świata)
+     * @param thickness Szerokość wskazówki (w jednostkach świata)
      */
     Hand(float length, float thickness);
     ~Hand();

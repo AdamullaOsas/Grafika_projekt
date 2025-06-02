@@ -1,6 +1,5 @@
 ﻿// src/hand.cpp
 #include "hand.hpp"
-#include <glm/gtc/type_ptr.hpp>
 #include <iostream>
 
 Hand::Hand(float length, float thickness)
@@ -64,7 +63,6 @@ Hand::Hand(float length, float thickness)
         GL_STATIC_DRAW);
 
     indexCount = indices.size();
-
     glBindVertexArray(0);
 
     std::cout << "[Hand] VAO=" << vao << " VBO=" << vbo
@@ -85,36 +83,23 @@ void Hand::buildGeometry()
     colors.clear();
     indices.clear();
 
-    // 8 wierzchołków sześcianu (płaszczyzna XY, grubość w Z = 0.2)
-    float halfThick = thick * 0.5f;
-    glm::vec3 base[8] = {
-        {0.0f,       -halfThick, 0.0f},
-        {len,        -halfThick, 0.0f},
-        {len,         halfThick, 0.0f},
-        {0.0f,        halfThick, 0.0f},
-        {0.0f,       -halfThick, 0.2f},
-        {len,        -halfThick, 0.2f},
-        {len,         halfThick, 0.2f},
-        {0.0f,        halfThick, 0.2f}
-    };
+    // Cztery wierzchołki płaskiego prostokąta w płaszczyźnie XY:
+    // (−thick/2, 0, 0), ( +thick/2, 0, 0 ), ( +thick/2, len, 0 ), ( −thick/2, len, 0 )
+    float halfTh = thick * 0.5f;
+    vertices.emplace_back(glm::vec4(-halfTh, 0.0f, 0.0f, 1.0f));
+    vertices.emplace_back(glm::vec4(halfTh, 0.0f, 0.0f, 1.0f));
+    vertices.emplace_back(glm::vec4(halfTh, len, 0.0f, 1.0f));
+    vertices.emplace_back(glm::vec4(-halfTh, len, 0.0f, 1.0f));
 
-    for (int i = 0; i < 8; ++i) {
-        vertices.emplace_back(glm::vec4(base[i], 1.0f));
-        // Przybliżona normalna dla wszystkich wierzchołków: (0,0,1)
+    // Wszystkie normalne skierowane w +Z (bo płaszczyzna XY)
+    for (int i = 0; i < 4; ++i) {
         normals.emplace_back(glm::vec4(0.0f, 0.0f, 1.0f, 0.0f));
-        // Kolor czerwony
-        colors.emplace_back(glm::vec4(0.8f, 0.0f, 0.0f, 1.0f));
+        // Przybliżony kolor wskazówki (ciemny szary)
+        colors.emplace_back(glm::vec4(0.2f, 0.2f, 0.2f, 1.0f));
     }
 
-    // Indeksy dla 12 trójkątów (6 ścian sześcianu)
-    indices = {
-        0,1,2,   2,3,0,   // front face (z=0)
-        4,5,6,   6,7,4,   // back face (z=0.2)
-        0,1,5,   5,4,0,   // bottom
-        2,3,7,   7,6,2,   // top
-        1,2,6,   6,5,1,   // right
-        3,0,4,   4,7,3    // left
-    };
+    // Indeksy – dwa trójkąty składające się na prostokąt
+    indices = { 0, 1, 2,   2, 3, 0 };
 
     std::cout << "[Hand::buildGeometry] vertices=" << vertices.size()
         << " normals=" << normals.size()
