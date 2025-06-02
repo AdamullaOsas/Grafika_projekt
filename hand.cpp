@@ -84,7 +84,7 @@ void Hand::buildGeometry()
     indices.clear();
 
     // Cztery wierzchołki płaskiego prostokąta w płaszczyźnie XY:
-    // (−thick/2, 0, 0), ( +thick/2, 0, 0 ), ( +thick/2, len, 0 ), ( −thick/2, len, 0 )
+    // (-thick/2, 0, 0), ( +thick/2, 0, 0 ), ( +thick/2, len, 0 ), ( -thick/2, len, 0 )
     float halfTh = thick * 0.5f;
     vertices.emplace_back(glm::vec4(-halfTh, 0.0f, 0.0f, 1.0f));
     vertices.emplace_back(glm::vec4(halfTh, 0.0f, 0.0f, 1.0f));

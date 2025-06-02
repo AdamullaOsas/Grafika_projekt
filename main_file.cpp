@@ -17,7 +17,7 @@ static const char* FRAGMENT_SHADER_PATH = "f_simplest.glsl";
 
 // Globalne zmienne aplikacji
 int windowWidth = 800;    // lekko poszerzone
-int windowHeight = 1280;
+int windowHeight = 1200;   // nieco niższe
 GLFWwindow* window = nullptr;
 
 ShaderProgram* spLambert = nullptr;
@@ -109,10 +109,10 @@ void initOpenGLProgram() {
 
     glUniform4f(locLP, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    // Duża zębatka – outerR=1.3, innerR=1.0
-    gearA = new Gear(1.3f, 1.0f, 60, 1.0f);
-    // Mała zębatka: outerR=0.2, innerR=0.15
-    gearB = new Gear(0.2f, 0.15f, 12, -5.0f);
+    // Duża zębatka – outerR=1.5, innerR=0.7 (jeszcze większy kontrast, zęby widoczne)
+    gearA = new Gear(1.5f, 0.7f, 60, 1.0f);
+    // Mała zębatka: outerR=0.25, innerR=0.15 (lekko powiększona dla czytelności)
+    gearB = new Gear(0.25f, 0.15f, 12, -5.0f);
     // Wskazówki
     secondHand = new Hand(0.9f, 0.015f);
     minuteHand = new Hand(0.7f, 0.015f);
@@ -147,14 +147,14 @@ void drawScene() {
 
     spLambert->use();
 
-    // Projekcja i widok – kamera w frontowym widoku na środek
+    // Projekcja i widok – kamera od przodu (eye z przodu osi, patrzy w dół Z)
     glm::mat4 Pm = glm::perspective(
         glm::radians(45.0f),
         (float)windowWidth / (float)windowHeight,
         0.1f, 100.0f
     );
     glm::mat4 Vm = glm::lookAt(
-        glm::vec3(0.0f, 0.0f, 5.0f),   // kamera na osi Z
+        glm::vec3(0.0f, 0.0f, -5.0f),   // kamera na osi Z (z = -5)
         glm::vec3(0.0f, 0.0f, 0.0f),   // patrzy na środek
         glm::vec3(0.0f, 1.0f, 0.0f)    // "up" = Y
     );
@@ -198,8 +198,8 @@ void drawScene() {
     glUniformMatrix4fv(locM, 1, GL_FALSE, &M_B[0][0]);
     gearB->draw();
 
-    // 3) Sekundnik: 6°/s, +90° start
-    float angleSec = fmod(t * 6.0f + 90.0f, 360.0f);
+    // 3) Sekundnik: 6°/s (bez +90°, aby wskazywał na 12 przy t=0)
+    float angleSec = fmod(t * 6.0f, 360.0f);
     glm::mat4 M_sec = glm::rotate(
         glm::mat4(1.0f),
         glm::radians(angleSec),
@@ -208,8 +208,8 @@ void drawScene() {
     glUniformMatrix4fv(locM, 1, GL_FALSE, &M_sec[0][0]);
     secondHand->draw();
 
-    // 4) Minutnik: 0.1°/s, +90° start
-    float angleMin = fmod(t * 0.1f + 90.0f, 360.0f);
+    // 4) Minutnik: 0.1°/s, bez +90°
+    float angleMin = fmod(t * 0.1f, 360.0f);
     glm::mat4 M_min = glm::rotate(
         glm::mat4(1.0f),
         glm::radians(angleMin),
@@ -218,8 +218,8 @@ void drawScene() {
     glUniformMatrix4fv(locM, 1, GL_FALSE, &M_min[0][0]);
     minuteHand->draw();
 
-    // 5) Godzinnik: 0.0083333°/s, +90° start
-    float angleHour = fmod(t * 0.0083333f + 90.0f, 360.0f);
+    // 5) Godzinnik: 0.0083333°/s, bez +90°
+    float angleHour = fmod(t * 0.0083333f, 360.0f);
     glm::mat4 M_hour = glm::rotate(
         glm::mat4(1.0f),
         glm::radians(angleHour),
