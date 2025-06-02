@@ -1,4 +1,4 @@
-// main_file.cpp
+// src/main_file.cpp
 
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
@@ -6,22 +6,16 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <iostream>
 
-// -----------------------------------------------------------------------------
-// ▶ Uwaga: w razie innej struktury folderów, popraw poniższe ścieżki:
-//    - „gear.hpp” oraz „hand.hpp” powinny być w katalogu z nagłówkami.
-//    - „shaderprogram.h” w katalogu z plikami nagłówkowymi (lub tam, gdzie go trzymasz).
-// -----------------------------------------------------------------------------
-#include "gear.hpp"            // <- np. #include "pliki naglowkowe/gear.hpp"
-#include "hand.hpp"            // <- np. #include "pliki naglowkowe/hand.hpp"
-#include "shaderprogram.h"     // <- np. #include "pliki naglowkowe/shaderprogram.h"
+#include "gear.hpp"          // popraw ścieżkę, jeśli nagłówki są gdzie indziej
+#include "hand.hpp"          // popraw ścieżkę, jeśli nagłówki są gdzie indziej
+#include "shaderprogram.h"   // popraw ścieżkę, jeśli nagłówki są gdzie indziej
 
 // ————————————————————————————————————————————————————————————————————————————————
-// ▶ Uwaga: ścieżki do plików *.glsl musisz dopasować według swojego układu katalogów.
-//    Poniżej zakładam, że shader’y leżą w „pliki zasobów/”.
-//    Jeśli są w „shaders/” lub innym katalogu, zmień ścieżki poniżej.
+// ▶ Uwaga: dopasuj wg swojej struktury katalogów:
+//    jeśli Twoje shadery są w „pliki zasobów/” lub „shaders/”.
 // ————————————————————————————————————————————————————————————————————————————————
-static const char* VERTEX_SHADER_PATH = "pliki zasobow/v_lambert.glsl";   // <- dopasuj ścieżkę
-static const char* FRAGMENT_SHADER_PATH = "pliki zasobow/f_lambert.glsl";   // <- dopasuj ścieżkę
+static const char* VERTEX_SHADER_PATH = "v_simplest.glsl";   // <- dopasuj ścieżkę
+static const char* FRAGMENT_SHADER_PATH = "f_simplest.glsl";   // <- dopasuj ścieżkę
 
 // ————————————————————————————————————————————————————————————————————————————————
 // Globalne zmienne aplikacji
@@ -37,12 +31,10 @@ Gear* gearA = nullptr;
 Gear* gearB = nullptr;
 Hand* secondHand = nullptr;
 
-// Macierze kamery/projekcji
-glm::mat4 P, V;
+// Uniform locations
+GLuint locP, locV, locM, locLP;
 
-// Sterowanie czasem
 bool paused = false;
-float lastTime = 0.0f;
 
 // ————————————————————————————————————————————————————————————————————————————————
 // Funkcja wywoływana przy zmianie rozmiaru okna
@@ -51,9 +43,6 @@ void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height) {
     glViewport(0, 0, width, height);
     windowWidth = width;
     windowHeight = height;
-    P = glm::perspective(glm::radians(45.0f),
-        (float)windowWidth / (float)windowHeight,
-        0.1f, 100.0f);
 }
 
 // ————————————————————————————————————————————————————————————————————————————————
@@ -67,12 +56,8 @@ void processInput(GLFWwindow* window) {
         paused = !paused;
     }
     if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS) {
-        // Resetujemy obiekty: usuwamy i tworzymy na nowo
-        delete gearA; delete gearB; delete secondHand;
-        gearA = new Gear(1.0f, 0.5f, 60, 1.0f);
-        gearB = new Gear(0.2f, 0.1f, 12, -5.0f);
-        secondHand = new Hand(1.0f, 0.02f); // <- zmieniono: tylko 2 argumenty
-        lastTime = static_cast<float>(glfwGetTime());
+        // Resetujemy czas
+        glfwSetTime(0.0);
     }
 }
 
@@ -106,47 +91,41 @@ void initOpenGLProgram() {
         std::exit(-1);
     }
 
-    // Ustawienia ogólne
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
     glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
 
     // ——————————————————————————————————————————————————————————————————————
-    // Ładowanie programu shaderowego (prosty Lambert)
+    // Ładowanie programu shaderowego (v_simplest + f_simplest)
     // ——————————————————————————————————————————————————————————————————————
     spLambert = new ShaderProgram(
-        VERTEX_SHADER_PATH,    // <- upewnij się, że ścieżka jest poprawna
-        nullptr,               // brak geometry shadera
-        FRAGMENT_SHADER_PATH   // <- upewnij się, że ścieżka jest poprawna
+        VERTEX_SHADER_PATH,
+        nullptr,
+        FRAGMENT_SHADER_PATH
     );
     spLambert->use();
 
-    // Pobranie lokacji uniformów P i V
-    GLuint locP = spLambert->u("P");
-    GLuint locV = spLambert->u("V");
+    // Pobranie lokacji uniformów P, V, M, lp
+    locP = spLambert->u("P");
+    locV = spLambert->u("V");
+    locM = spLambert->u("M");
+    locLP = spLambert->u("lp");
 
-    // Ustawienie początkowych macierzy projekcji i widoku
-    P = glm::perspective(glm::radians(45.0f),
-        (float)windowWidth / (float)windowHeight,
-        0.1f, 100.0f);
-    V = glm::lookAt(glm::vec3(0.0f, 3.0f, 5.0f),  // pozycja kamery
-        glm::vec3(0.0f, 0.0f, 0.0f),  // punkt, w który patrzymy
-        glm::vec3(0.0f, 1.0f, 0.0f));// wektor "up"
-    glUniformMatrix4fv(locP, 1, GL_FALSE, &P[0][0]);
-    glUniformMatrix4fv(locV, 1, GL_FALSE, &V[0][0]);
+    // Ustawienie pozycji źródła światła (lp) – raz na cały czas
+    // Przykład: światło z przodu i z góry = (1, 1, 1, 1)
+    glUniform4f(locLP, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    // ——————————————————————————————————————————————————————————————————————
-    // Tworzenie obiektów zegara (koła i wskazówki)
-    // ——————————————————————————————————————————————————————————————————————
-    gearA = new Gear(1.0f, 0.5f, 60, 1.0f);
-    gearB = new Gear(0.2f, 0.1f, 12, -5.0f);
-    secondHand = new Hand(1.0f, 0.02f); // <- tylko długość i grubość
+    // Tworzenie obiektów zegara
+    gearA = new Gear(1.0f, 0.8f, 60, 1.0f);  // 60 zębów, 1 rpm
+    gearB = new Gear(0.2f, 0.15f, 12, -5.0f); // 12 zębów, -5 rpm (synchronizacja)
+    secondHand = new Hand(1.2f, 0.02f);            // długość 1.2, grubość 0.02
 
-    lastTime = static_cast<float>(glfwGetTime());
+    std::cout << "[Init] GearA=" << gearA << " GearB=" << gearB
+        << " Hand=" << secondHand << "\n";
 }
 
 // ————————————————————————————————————————————————————————————————————————————————
-// Czyszczenie zasobów przed zamknięciem
+// Sprzątanie zasobów
 // ————————————————————————————————————————————————————————————————————————————————
 void cleanup() {
     delete gearA;
@@ -163,48 +142,49 @@ void drawScene() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     spLambert->use();
-    GLuint locP = spLambert->u("P");
-    GLuint locV = spLambert->u("V");
-    GLuint locM = spLambert->u("M");
 
-    // Odświeżamy macierze P i V (na wypadek resize’u)
-    glUniformMatrix4fv(locP, 1, GL_FALSE, &P[0][0]);
-    glUniformMatrix4fv(locV, 1, GL_FALSE, &V[0][0]);
+    // 1) Ustawiamy macierze P i V
+    glm::mat4 Pm = glm::perspective(glm::radians(45.0f),
+        (float)windowWidth / (float)windowHeight,
+        0.1f, 100.0f);
+    glm::mat4 Vm = glm::lookAt(glm::vec3(0.0f, 1.5f, -5.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f));
+    glUniformMatrix4fv(locP, 1, GL_FALSE, &Pm[0][0]);
+    glUniformMatrix4fv(locV, 1, GL_FALSE, &Vm[0][0]);
 
-    // ———————————————————————————————————————————————————————————————————
-    // Rysujemy koło A (w punkcie (0,0,0))
-    // ———————————————————————————————————————————————————————————————————
+    // Oblicz pełny czas (w sekundach) od startu
+    float t = static_cast<float>(glfwGetTime());
+
+    // Obliczamy kąt dla gearA: rpm (obr./min) -> deg/s = rpm*360/60
+    float angleA_deg = fmod(t * (gearA->getRPM() * 360.0f / 60.0f), 360.0f);
+    // Macierz modelu dla gearA (obrót w osi Z)
+    glm::mat4 M_A = glm::rotate(glm::mat4(1.0f),
+        glm::radians(angleA_deg),
+        glm::vec3(0.0f, 0.0f, 1.0f));
+    glUniformMatrix4fv(locM, 1, GL_FALSE, &M_A[0][0]);
     gearA->draw();
 
-    // ———————————————————————————————————————————————————————————————————
-    // Rysujemy koło B przesunięte o (outerR_A + outerR_B) w prawo:
-    // Jeśli outerRadius gearA=1.0f, gearB=0.2f, to wektor = (1.0f + 0.2f, 0, 0).
-    // Jeśli używasz innych wartości, zmień poniższy wektor translacji.
-    // ———————————————————————————————————————————————————————————————————
-    glm::mat4 translateB = glm::translate(glm::mat4(1.0f),
-        glm::vec3(1.0f + 0.2f, 0.0f, 0.0f)); // <- dostosuj, jeśli promienie się różnią
-    glUniformMatrix4fv(locM, 1, GL_FALSE, &translateB[0][0]);
+    // Synchronizacja gearB: rpm_B = -rpm_A * teethA/teethB
+    float rpmB = -gearA->getRPM() * (float)gearA->getTeethCount() / (float)gearB->getTeethCount();
+    float angleB_deg = fmod(t * (rpmB * 360.0f / 60.0f), 360.0f);
+    // Macierz Modelu dla gearB: najpierw translacja (outerR_A + outerR_B), potem obrót
+    float offsetX = gearA->getOuterRadius() + gearB->getOuterRadius();
+    glm::mat4 M_B = glm::translate(glm::mat4(1.0f),
+        glm::vec3(offsetX, 0.0f, 0.0f));
+    M_B = glm::rotate(M_B,
+        glm::radians(angleB_deg),
+        glm::vec3(0.0f, 0.0f, 1.0f));
+    glUniformMatrix4fv(locM, 1, GL_FALSE, &M_B[0][0]);
     gearB->draw();
 
-    // ———————————————————————————————————————————————————————————————————
-    // Rysowanie wskazówki sekundowej: obrót zależny od czasu rzeczywistego
-    // ———————————————————————————————————————————————————————————————————
-    float currentTime = static_cast<float>(glfwGetTime());
-    float deltaTime = currentTime - lastTime;
-    lastTime = currentTime;
-
-    if (!paused) {
-        // Kąty kół aktualizują się wewnątrz metody draw(), więc nie wołamy żadnej update()
-    }
-
-    // Obliczamy macierz obrotu dla sekundnika (6°/s)
-    float angleSec = fmod(currentTime * 6.0f, 360.0f);
-    glm::mat4 rotateHand = glm::rotate(glm::mat4(1.0f),
+    // Wskaźnik sekundowy: 6°/s
+    float angleSec = fmod(t * 6.0f, 360.0f);
+    glm::mat4 M_hand = glm::rotate(glm::mat4(1.0f),
         glm::radians(angleSec),
         glm::vec3(0.0f, 0.0f, 1.0f));
-    glUniformMatrix4fv(locM, 1, GL_FALSE, &rotateHand[0][0]);
-
-    secondHand->draw(); // <- usunięty argument kąta, bo Hand::draw() nie przyjmuje parametrów
+    glUniformMatrix4fv(locM, 1, GL_FALSE, &M_hand[0][0]);
+    secondHand->draw();
 }
 
 // ————————————————————————————————————————————————————————————————————————————————
@@ -212,6 +192,9 @@ void drawScene() {
 // ————————————————————————————————————————————————————————————————————————————————
 int main() {
     initOpenGLProgram();
+
+    // Reset zegara na start
+    glfwSetTime(0.0);
 
     while (!glfwWindowShouldClose(window)) {
         processInput(window);

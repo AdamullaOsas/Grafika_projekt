@@ -1,95 +1,178 @@
-﻿#include "gear.hpp"
-#include <glm/gtc/constants.hpp>
+﻿// src/gear.cpp
+#include "gear.hpp"
+#include <glm/gtc/constants.hpp>  // glm::pi<float>()
+#include <iostream>
 
-Gear::Gear(float outerRadius_, float innerRadius_, int teethCount_, float rpm_)
-    : outerRadius(outerRadius_), innerRadius(innerRadius_), teethCount(teethCount_), rpm(rpm_), angleDeg(0.0f), vao(0), vbo(0), nbo(0), ebo(0) {
-    generateGeometry();
-    setupBuffers();
-}
+Gear::Gear(float outerRadius, float innerRadius, int teethCount_, float rpm_)
+    : outerR(outerRadius), innerR(innerRadius), teethCount(teethCount_), rpm(rpm_),
+    vao(0), vbo(0), ebo(0), indexCount(0)
+{
+    buildGeometry();
 
-Gear::~Gear() {
-    if (ebo) glDeleteBuffers(1, &ebo);
-    if (nbo) glDeleteBuffers(1, &nbo);
-    if (vbo) glDeleteBuffers(1, &vbo);
-    if (vao) glDeleteVertexArrays(1, &vao);
-}
-
-void Gear::generateGeometry() {
-    // Generowanie uproszczonej geometrii: walec z zębami jako proste wycięcia
-    const int segments = teethCount * 2;
-    float depth = (outerRadius - innerRadius) * 0.5f;
-    float midRadius = (outerRadius + innerRadius) * 0.5f;
-
-    // Wierzchołki walca
-    for (int i = 0; i <= segments; ++i) {
-        float theta = glm::two_pi<float>() * float(i) / float(segments);
-        float cosT = cos(theta);
-        float sinT = sin(theta);
-        // Górny pierścień
-        vertices.emplace_back(midRadius * cosT, midRadius * sinT, depth);
-        normals.emplace_back(cosT, sinT, 0.0f);
-        // Dolny pierścień
-        vertices.emplace_back(midRadius * cosT, midRadius * sinT, -depth);
-        normals.emplace_back(cosT, sinT, 0.0f);
-    }
-    // Indeksy dla bocznej powierzchni walca
-    for (int i = 0; i < segments; ++i) {
-        int idx = i * 2;
-        // Trójkąty
-        indices.push_back(idx);
-        indices.push_back(idx + 2);
-        indices.push_back(idx + 1);
-
-        indices.push_back(idx + 1);
-        indices.push_back(idx + 2);
-        indices.push_back(idx + 3);
-    }
-
-    // TODO: można dodać geometrię zębów korzystając z kosztnego podejścia (omijamy dla prostoty)
-}
-
-void Gear::setupBuffers() {
+    // Tworzymy VAO/VBO/EBO
     glGenVertexArrays(1, &vao);
     glGenBuffers(1, &vbo);
-    glGenBuffers(1, &nbo);
     glGenBuffers(1, &ebo);
 
     glBindVertexArray(vao);
 
-    // Wierzchołki
+    // Przygotowujemy bufor interleaved: [pos (4 floats)] [normal (4 floats)] [color (4 floats)]
+    std::vector<float> interleaved;
+    interleaved.reserve(vertices.size() * (4 + 4 + 4));
+
+    for (size_t i = 0; i < vertices.size(); ++i) {
+        // Pozycja
+        interleaved.push_back(vertices[i].x);
+        interleaved.push_back(vertices[i].y);
+        interleaved.push_back(vertices[i].z);
+        interleaved.push_back(vertices[i].w);
+        // Normalna
+        interleaved.push_back(normals[i].x);
+        interleaved.push_back(normals[i].y);
+        interleaved.push_back(normals[i].z);
+        interleaved.push_back(normals[i].w);
+        // Kolor
+        interleaved.push_back(colors[i].x);
+        interleaved.push_back(colors[i].y);
+        interleaved.push_back(colors[i].z);
+        interleaved.push_back(colors[i].w);
+    }
+
+    // VBO – interleaved
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(glm::vec3), vertices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,
+        interleaved.size() * sizeof(float),
+        interleaved.data(),
+        GL_STATIC_DRAW);
+
+    // Atrybuty wierzchołka zgodnie z layout(location) w shaderze:
+    // layout(location = 0) in vec4 vertex;
+    // layout(location = 1) in vec4 color;
+    // layout(location = 2) in vec4 normal;
+    GLsizei stride = (4 + 4 + 4) * sizeof(float);
+    // Pozycja: location = 0
+    glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, stride, (void*)0);
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-
-    // Normale
-    glBindBuffer(GL_ARRAY_BUFFER, nbo);
-    glBufferData(GL_ARRAY_BUFFER, normals.size() * sizeof(glm::vec3), normals.data(), GL_STATIC_DRAW);
+    // Normal: location = 2
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, stride, (void*)(4 * sizeof(float)));
+    glEnableVertexAttribArray(2);
+    // Kolor: location = 1
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, stride, (void*)((4 + 4) * sizeof(float)));
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-    // Indeksy
+    // EBO – indeksy
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER,
+        indices.size() * sizeof(GLuint),
+        indices.data(),
+        GL_STATIC_DRAW);
 
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    indexCount = indices.size();
+
     glBindVertexArray(0);
+
+    // Debug
+    std::cout << "[Gear] VAO=" << vao << " VBO=" << vbo
+        << " EBO=" << ebo << " indices=" << indexCount << "\n";
 }
 
-void Gear::update(float deltaTime) {
-    // deltaTime w sekundach, rpm => obroty na minutę => stopnie na sekundę
-    float degPerSec = rpm * 360.0f / 60.0f;
-    angleDeg += degPerSec * deltaTime;
-    if (angleDeg >= 360.0f) angleDeg -= 360.0f;
+Gear::~Gear()
+{
+    if (ebo) glDeleteBuffers(1, &ebo);
+    if (vbo) glDeleteBuffers(1, &vbo);
+    if (vao) glDeleteVertexArrays(1, &vao);
 }
 
-void Gear::draw() {
-    // Obliczenie macierzy modelu
-    glm::mat4 M = glm::rotate(glm::mat4(1.0f), glm::radians(angleDeg), glm::vec3(0.0f, 0.0f, 1.0f));
-    GLuint locM = glGetUniformLocation(0, "M"); // Zakładamy, że shader jest już użyty i ma uniform M
-    glUniformMatrix4fv(locM, 1, GL_FALSE, &M[0][0]);
+void Gear::buildGeometry()
+{
+    vertices.clear();
+    normals.clear();
+    colors.clear();
+    indices.clear();
 
+    // Parametry torusa
+    const int radialSegs = 32;
+    const float tubeR = (outerR - innerR) * 0.5f;
+    const float midR = innerR + tubeR;
+
+    // Generujemy wierzchołki torusa (upraszczając – normalna = (x, y, z) znormalizowane)
+    for (int i = 0; i <= radialSegs; ++i) {
+        float theta = 2.0f * glm::pi<float>() * float(i) / float(radialSegs);
+        float cosT = cos(theta), sinT = sin(theta);
+        for (int j = 0; j <= radialSegs; ++j) {
+            float phi = 2.0f * glm::pi<float>() * float(j) / float(radialSegs);
+            float cosP = cos(phi), sinP = sin(phi);
+            float x = (midR + tubeR * cosP) * cosT;
+            float y = (midR + tubeR * cosP) * sinT;
+            float z = tubeR * sinP;
+            vertices.emplace_back(glm::vec4(x, y, z, 1.0f));
+
+            // Normalna: po prostu (x, y, z) znormalizowane
+            glm::vec3 n3 = glm::normalize(glm::vec3(x, y, z));
+            normals.emplace_back(glm::vec4(n3, 0.0f));
+
+            // Kolor stali
+            colors.emplace_back(glm::vec4(0.7f, 0.7f, 0.75f, 1.0f));
+        }
+    }
+
+    // Indeksy torusa (triangle strip)
+    for (int i = 0; i < radialSegs; ++i) {
+        for (int j = 0; j < radialSegs; ++j) {
+            int first = i * (radialSegs + 1) + j;
+            int second = first + radialSegs + 1;
+            indices.push_back(first);
+            indices.push_back(second);
+            indices.push_back(first + 1);
+
+            indices.push_back(second);
+            indices.push_back(second + 1);
+            indices.push_back(first + 1);
+        }
+    }
+
+    // Prosta symulacja zębów – pojedyncze kostki na obwodzie
+    for (int t = 0; t < teethCount; ++t) {
+        float ang = 2.0f * glm::pi<float>() * float(t) / float(teethCount);
+        float toothDepth = tubeR * 0.5f;
+        float baseR1 = outerR + 0.0f * toothDepth;
+        float baseR2 = outerR + 1.0f * toothDepth;
+        // 4 wierzchołki kwadratu na obwodzie:
+        glm::vec3 pts[4] = {
+            { baseR1 * cos(ang), baseR1 * sin(ang),  0.0f },
+            { baseR2 * cos(ang), baseR2 * sin(ang),  0.0f },
+            { baseR2 * cos(ang), baseR2 * sin(ang),  tubeR * 0.2f },
+            { baseR1 * cos(ang), baseR1 * sin(ang),  tubeR * 0.2f }
+        };
+        GLuint startIdx = vertices.size();
+        for (int k = 0; k < 4; ++k) {
+            vertices.emplace_back(glm::vec4(pts[k], 1.0f));
+            // Normalna przybliżona jako (cos(ang), sin(ang), 0)
+            glm::vec3 n3 = glm::normalize(glm::vec3(cos(ang), sin(ang), 0.0f));
+            normals.emplace_back(glm::vec4(n3, 0.0f));
+            // Kolor zęba jaśniejszy
+            colors.emplace_back(glm::vec4(0.8f, 0.8f, 0.8f, 1.0f));
+        }
+        // Indeksy: 2 trójkąty na kwadrat
+        indices.push_back(startIdx + 0);
+        indices.push_back(startIdx + 1);
+        indices.push_back(startIdx + 2);
+        indices.push_back(startIdx + 2);
+        indices.push_back(startIdx + 3);
+        indices.push_back(startIdx + 0);
+    }
+
+    std::cout << "[Gear::buildGeometry] vertices=" << vertices.size()
+        << " normals=" << normals.size()
+        << " colors=" << colors.size()
+        << " indices=" << indices.size() << "\n";
+}
+
+void Gear::draw()
+{
     glBindVertexArray(vao);
-    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indices.size()), GL_UNSIGNED_INT, nullptr);
+    glDrawElements(GL_TRIANGLES,
+        static_cast<GLsizei>(indexCount),
+        GL_UNSIGNED_INT, nullptr);
     glBindVertexArray(0);
 }

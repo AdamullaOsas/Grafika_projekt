@@ -1,153 +1,137 @@
-﻿/*
-Niniejszy program jest wolnym oprogramowaniem; możesz go
-rozprowadzać dalej i / lub modyfikować na warunkach Powszechnej
-Licencji Publicznej GNU, wydanej przez Fundację Wolnego
-Oprogramowania - według wersji 2 tej Licencji lub(według twojego
-wyboru) którejś z późniejszych wersji.
-
-Niniejszy program rozpowszechniany jest z nadzieją, iż będzie on
-użyteczny - jednak BEZ JAKIEJKOLWIEK GWARANCJI, nawet domyślnej
-gwarancji PRZYDATNOŚCI HANDLOWEJ albo PRZYDATNOŚCI DO OKREŚLONYCH
-ZASTOSOWAŃ.W celu uzyskania bliższych informacji sięgnij do
-Powszechnej Licencji Publicznej GNU.
-
-Z pewnością wraz z niniejszym programem otrzymałeś też egzemplarz
-Powszechnej Licencji Publicznej GNU(GNU General Public License);
-jeśli nie - napisz do Free Software Foundation, Inc., 59 Temple
-Place, Fifth Floor, Boston, MA  02110 - 1301  USA
-*/
+﻿// src/shaderprogram.cpp
+#define _CRT_SECURE_NO_WARNINGS  // aby uniknąć ostrzeżeń przy fopen
 
 #include "shaderprogram.h"
+#include <vector>
+#include <iostream>
 
-
-
-//Procedura wczytuje plik do tablicy znaków.
+// Procedura wczytuje plik do tablicy znaków.
 char* ShaderProgram::readFile(const char* fileName) {
-	int filesize;
-	FILE *plik;
-	char* result;
+    FILE* plik;
+    long filesize;
+    char* result;
 
-	#pragma warning(suppress : 4996) //Wyłączenie błędu w Visual Studio wynikające z nietrzymania się standardów przez Microsoft.
-	plik=fopen(fileName,"rb");
-	if (plik != NULL) {
-		fseek(plik, 0, SEEK_END);
-		filesize = ftell(plik);
-		fseek(plik, 0, SEEK_SET);
-		result = new char[filesize + 1];
-		#pragma warning(suppress : 6386) //Wyłączenie błędu w Visual Studio wynikającego z błędnej analizy statycznej kodu.
-		int readsize=fread(result, 1, filesize, plik);
-		result[filesize] = 0;
-		fclose(plik);
+    // Użycie fopen_s zamiast fopen, aby uniknąć ostrzeżenia
+#ifdef _WIN32
+    errno_t err = fopen_s(&plik, fileName, "rb");
+    if (err != 0 || plik == nullptr) {
+        return nullptr;
+    }
+#else
+    plik = fopen(fileName, "rb");
+    if (plik == nullptr) {
+        return nullptr;
+    }
+#endif
 
-		return result;
-	}
+    fseek(plik, 0, SEEK_END);
+    filesize = ftell(plik);
+    fseek(plik, 0, SEEK_SET);
 
-	return NULL;
+    result = new char[filesize + 1];
+    size_t readsize = fread(result, 1, filesize, plik);
+    result[filesize] = '\0';
+    fclose(plik);
 
+    return result;
 }
 
-//Metoda wczytuje i kompiluje shader, a następnie zwraca jego uchwyt
-GLuint ShaderProgram::loadShader(GLenum shaderType,const char* fileName) {
-	//Wygeneruj uchwyt na shader
-	GLuint shader=glCreateShader(shaderType);//shaderType to GL_VERTEX_SHADER, GL_GEOMETRY_SHADER lub GL_FRAGMENT_SHADER
-	//Wczytaj plik ze źródłem shadera do tablicy znaków
-	const GLchar* shaderSource=readFile(fileName);
-	//Powiąż źródło z uchwytem shadera
-	glShaderSource(shader,1,&shaderSource,NULL);
-	//Skompiluj źródło
-	glCompileShader(shader);
-	//Usuń źródło shadera z pamięci (nie będzie już potrzebne)
-	delete []shaderSource;
+// Metoda wczytuje i kompiluje shader, a następnie zwraca jego uchwyt
+GLuint ShaderProgram::loadShader(GLenum shaderType, const char* fileName) {
+    // Generujemy uchwyt na shader
+    GLuint shader = glCreateShader(shaderType);
 
-	//Pobierz log błędów kompilacji i wyświetl
-	int infologLength = 0;
-	int charsWritten  = 0;
-	char *infoLog;
+    // Wczytaj plik ze źródłem shadera do tablicy znaków
+    const GLchar* shaderSource = readFile(fileName);
+    if (!shaderSource) {
+        std::cerr << "[ShaderProgram] Nie mogę wczytać pliku: " << fileName << "\n";
+        return 0;
+    }
 
-	glGetShaderiv(shader, GL_INFO_LOG_LENGTH,&infologLength);
+    // Powiąż źródło z uchwytem shadera
+    glShaderSource(shader, 1, &shaderSource, nullptr);
+    // Skompiluj źródło
+    glCompileShader(shader);
+    delete[] shaderSource;
 
-	if (infologLength > 1) {
-		infoLog = new char[infologLength];
-		glGetShaderInfoLog(shader, infologLength, &charsWritten, infoLog);
-		printf("%s\n",infoLog);
-		delete []infoLog;
-	}
-
-	//Zwróć uchwyt wygenerowanego shadera
-	return shader;
+    // Sprawdź status kompilacji
+    GLint compileStatus = 0;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &compileStatus);
+    if (compileStatus == GL_FALSE) {
+        GLint logLen = 0;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &logLen);
+        std::vector<char> log(logLen);
+        glGetShaderInfoLog(shader, logLen, nullptr, log.data());
+        std::cerr << "[ShaderProgram] Błąd kompilacji shadera (" << fileName << "):\n"
+            << log.data() << "\n";
+    }
+    return shader;
 }
 
-ShaderProgram::ShaderProgram(const char* vertexShaderFile,const char* geometryShaderFile,const char* fragmentShaderFile) {
-	//Wczytaj vertex shader
-	printf("Loading vertex shader...\n");
-	vertexShader=loadShader(GL_VERTEX_SHADER,vertexShaderFile);
+ShaderProgram::ShaderProgram(const char* vertexShaderFile, const char* geometryShaderFile, const char* fragmentShaderFile) {
+    // Wczytaj vertex shader
+    std::cout << "[ShaderProgram] Loading vertex shader: " << vertexShaderFile << "\n";
+    vertexShader = loadShader(GL_VERTEX_SHADER, vertexShaderFile);
 
-	//Wczytaj geometry shader
-	if (geometryShaderFile!=NULL) {
-		printf("Loading geometry shader...\n");
-		geometryShader=loadShader(GL_GEOMETRY_SHADER,geometryShaderFile);
-	} else {
-		geometryShader=0;
-	}
+    // Wczytaj geometry shader, jeśli podano
+    if (geometryShaderFile != nullptr) {
+        std::cout << "[ShaderProgram] Loading geometry shader: " << geometryShaderFile << "\n";
+        geometryShader = loadShader(GL_GEOMETRY_SHADER, geometryShaderFile);
+    }
+    else {
+        geometryShader = 0;
+    }
 
-	//Wczytaj fragment shader
-	printf("Loading fragment shader...\n");
-	fragmentShader=loadShader(GL_FRAGMENT_SHADER,fragmentShaderFile);
+    // Wczytaj fragment shader
+    std::cout << "[ShaderProgram] Loading fragment shader: " << fragmentShaderFile << "\n";
+    fragmentShader = loadShader(GL_FRAGMENT_SHADER, fragmentShaderFile);
 
-	//Wygeneruj uchwyt programu cieniującego
-	shaderProgram=glCreateProgram();
+    // Wygeneruj uchwyt programu cieniującego
+    shaderProgram = glCreateProgram();
 
-	//Podłącz do niego shadery i zlinkuj program
-	glAttachShader(shaderProgram,vertexShader);
-	glAttachShader(shaderProgram,fragmentShader);
-	if (geometryShaderFile!=NULL) glAttachShader(shaderProgram,geometryShader);
-	glLinkProgram(shaderProgram);
+    // Podłącz shadery i zlinkuj
+    if (vertexShader) glAttachShader(shaderProgram, vertexShader);
+    if (fragmentShader) glAttachShader(shaderProgram, fragmentShader);
+    if (geometryShader) glAttachShader(shaderProgram, geometryShader);
 
-	//Pobierz log błędów linkowania i wyświetl
-	int infologLength = 0;
-	int charsWritten  = 0;
-	char *infoLog;
+    // Optional: jawne bindowanie lokacji
+    glBindAttribLocation(shaderProgram, 0, "vertex");
+    glBindAttribLocation(shaderProgram, 1, "color");
+    glBindAttribLocation(shaderProgram, 2, "normal");
 
-	glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH,&infologLength);
+    glLinkProgram(shaderProgram);
 
-	if (infologLength > 1)
-	{
-		infoLog = new char[infologLength];
-		glGetProgramInfoLog(shaderProgram, infologLength, &charsWritten, infoLog);
-		printf("%s\n",infoLog);
-		delete []infoLog;
-	}
-
-	printf("Shader program created \n");
+    // Sprawdź status linkowania
+    GLint linkStatus = 0;
+    glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkStatus);
+    if (linkStatus == GL_FALSE) {
+        GLint logLen = 0;
+        glGetProgramiv(shaderProgram, GL_INFO_LOG_LENGTH, &logLen);
+        std::vector<char> log(logLen);
+        glGetProgramInfoLog(shaderProgram, logLen, nullptr, log.data());
+        std::cerr << "[ShaderProgram] Błąd linkowania programu:\n"
+            << log.data() << "\n";
+    }
+    else {
+        std::cout << "[ShaderProgram] Shader program created: " << shaderProgram << "\n";
+    }
 }
 
 ShaderProgram::~ShaderProgram() {
-	//Odłącz shadery od programu
-	glDetachShader(shaderProgram, vertexShader);
-	if (geometryShader!=0) glDetachShader(shaderProgram, geometryShader);
-	glDetachShader(shaderProgram, fragmentShader);
-
-	//Wykasuj shadery
-	glDeleteShader(vertexShader);
-	if (geometryShader!=0) glDeleteShader(geometryShader);
-	glDeleteShader(fragmentShader);
-
-	//Wykasuj program
-	glDeleteProgram(shaderProgram);
+    if (vertexShader) { glDetachShader(shaderProgram, vertexShader);   glDeleteShader(vertexShader); }
+    if (geometryShader) { glDetachShader(shaderProgram, geometryShader); glDeleteShader(geometryShader); }
+    if (fragmentShader) { glDetachShader(shaderProgram, fragmentShader); glDeleteShader(fragmentShader); }
+    if (shaderProgram)  glDeleteProgram(shaderProgram);
 }
 
-
-//Włącz używanie programu cieniującego reprezentowanego przez aktualny obiekt
 void ShaderProgram::use() {
-	glUseProgram(shaderProgram);
+    glUseProgram(shaderProgram);
 }
 
-//Pobierz numer slotu odpowiadającego zmiennej jednorodnej o nazwie variableName
 GLuint ShaderProgram::u(const char* variableName) {
-	return glGetUniformLocation(shaderProgram,variableName);
+    return glGetUniformLocation(shaderProgram, variableName);
 }
 
-//Pobierz numer slotu odpowiadającego atrybutowi o nazwie variableName
 GLuint ShaderProgram::a(const char* variableName) {
-	return glGetAttribLocation(shaderProgram,variableName);
+    return glGetAttribLocation(shaderProgram, variableName);
 }
