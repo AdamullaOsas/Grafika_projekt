@@ -1,4 +1,5 @@
 ﻿// include/gear.hpp
+
 #ifndef GEAR_HPP
 #define GEAR_HPP
 
@@ -33,6 +34,9 @@ public:
     /// Dostęp do promienia zewnętrznego (używany przy translacji koła B).
     float getOuterRadius() const { return outerR; }
 
+    /// Dostęp do promienia wewnętrznego (używany przy znacznikach godzin).
+    float getInnerRadius() const { return innerR; }
+
     /// Zwrot wartości rpm (tylko gdy chcemy odczytać prędkość).
     float getRPM() const { return rpm; }
 
@@ -52,7 +56,7 @@ private:
     // Bufory geometrii
     std::vector<glm::vec4> vertices; // (x, y, z, 1)
     std::vector<glm::vec4> normals;  // (nx, ny, nz, 0)
-    std::vector<glm::vec4> colors;   // (r, g, b, a)
+    std::vector <glm::vec4> colors;   // (r, g, b, a)
     std::vector<GLuint>    indices;
 };
 

@@ -1,4 +1,5 @@
 ﻿// src/gear.cpp
+
 #include "gear.hpp"
 #include <glm/gtc/constants.hpp>  // glm::pi<float>()
 #include <iostream>
@@ -45,10 +46,6 @@ Gear::Gear(float outerRadius, float innerRadius, int teethCount_, float rpm_)
         interleaved.data(),
         GL_STATIC_DRAW);
 
-    // Atrybuty wierzchołka zgodnie z layout(location) w shaderze:
-    // layout(location = 0) in vec4 vertex;
-    // layout(location = 1) in vec4 color;
-    // layout(location = 2) in vec4 normal;
     GLsizei stride = (4 + 4 + 4) * sizeof(float);
     // Pozycja: location = 0
     glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, stride, (void*)0);

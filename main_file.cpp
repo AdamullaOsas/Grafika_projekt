@@ -17,7 +17,7 @@ static const char* FRAGMENT_SHADER_PATH = "f_simplest.glsl";
 
 // Globalne zmienne aplikacji
 int windowWidth = 800;    // lekko poszerzone
-int windowHeight = 1200;   // nieco niższe
+int windowHeight = 1200;  // nieco niższe
 GLFWwindow* window = nullptr;
 
 ShaderProgram* spLambert = nullptr;
@@ -109,15 +109,15 @@ void initOpenGLProgram() {
 
     glUniform4f(locLP, 1.0f, 1.0f, 1.0f, 1.0f);
 
-    // Duża zębatka – outerR=1.5, innerR=0.7 (jeszcze większy kontrast, zęby widoczne)
-    gearA = new Gear(1.5f, 0.7f, 60, 1.0f);
-    // Mała zębatka: outerR=0.25, innerR=0.15 (lekko powiększona dla czytelności)
+    // Duża zębatka – outerR=1.2, innerR=1.1, 60 zębów
+    gearA = new Gear(1.2f, 1.1f, 60, 1.0f);
+    // Mała zębatka: outerR=0.25, innerR=0.15, 12 zębów
     gearB = new Gear(0.25f, 0.15f, 12, -5.0f);
     // Wskazówki
     secondHand = new Hand(0.9f, 0.015f);
     minuteHand = new Hand(0.7f, 0.015f);
     hourHand = new Hand(0.5f, 0.015f);
-    markerHand = new Hand(0.1f, 0.02f);
+    markerHand = new Hand(0.2f, 0.02f);
 
     prevTime = static_cast<float>(glfwGetTime());
     std::cout << "[Init] GearA=" << gearA << " GearB=" << gearB
@@ -155,8 +155,8 @@ void drawScene() {
     );
     glm::mat4 Vm = glm::lookAt(
         glm::vec3(0.0f, 0.0f, -5.0f),   // kamera na osi Z (z = -5)
-        glm::vec3(0.0f, 0.0f, 0.0f),   // patrzy na środek
-        glm::vec3(0.0f, 1.0f, 0.0f)    // "up" = Y
+        glm::vec3(0.0f, 0.0f, 0.0f),     // patrzy na środek
+        glm::vec3(0.0f, 1.0f, 0.0f)      // "up" = Y
     );
     glUniformMatrix4fv(locP, 1, GL_FALSE, &Pm[0][0]);
     glUniformMatrix4fv(locV, 1, GL_FALSE, &Vm[0][0]);
@@ -228,17 +228,19 @@ void drawScene() {
     glUniformMatrix4fv(locM, 1, GL_FALSE, &M_hour[0][0]);
     hourHand->draw();
 
-    // 6) Znaczniki godzin (12 prostokątów)
-    float outerRA = gearA->getOuterRadius();
+    // 6) Znaczniki godzin (12 prostokątów) – wewnątrz zębatki
+    float innerRA = gearA->getInnerRadius();
     for (int i = 0; i < 12; ++i) {
-        float angDeg = float(i) * 30.0f;
+        float angDeg = float(i) * 30.0f; // co 30°
         glm::mat4 M_mk = glm::rotate(
             glm::mat4(1.0f),
             glm::radians(angDeg),
             glm::vec3(0.0f, 0.0f, 1.0f)
         );
-        float r = outerRA + 0.05f;
+        // przesuwamy marker na promień = innerRA - 0.05
+        float r = innerRA - 0.05f;
         M_mk = glm::translate(M_mk, glm::vec3(r, 0.0f, 0.0f));
+        // obracamy prostokąt o 90° względem promienia
         M_mk = glm::rotate(
             M_mk,
             glm::radians(90.0f),
